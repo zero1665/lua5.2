@@ -112,7 +112,8 @@ static int countlevels (lua_State *L) {
   return le - 1;
 }
 
-
+/*创建状态机L1 的栈回溯并将其压栈。如果msg 为非空，那么它会加到回溯信息的前面。
+参数level 指定要从栈的哪一层开始回溯。 */
 LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1,
                                 const char *msg, int level) {
   lua_Debug ar;
@@ -149,7 +150,9 @@ LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1,
 ** Error-report functions
 ** =======================================================
 */
-
+/*用包含extramsg（作为注解）的标准消息唤起一个错误。
+虽然此函数永远不会返回， 但作为一种习惯， 在C 函数中还是使用return
+luaL_argerror(args)。 */
 LUALIB_API int luaL_argerror (lua_State *L, int narg, const char *extramsg) {
   lua_Debug ar;
   if (!lua_getstack(L, 0, &ar))  /* no stack frame? */
@@ -179,7 +182,11 @@ static void tag_error (lua_State *L, int narg, int tag) {
   typeerror(L, narg, lua_typename(L, tag));
 }
 
-
+/*将一个字符串压入栈。该字符串可以标识当前调用栈中第lvl 层的控制位置。该字符串
+的格式为：
+chunkname:currentline:
+0 层是当前执行的函数，1 层是调用当前函数的函数，以此类推。
+此函数用来构造错误消息的前缀。 */
 LUALIB_API void luaL_where (lua_State *L, int level) {
   lua_Debug ar;
   if (lua_getstack(L, level, &ar)) {  /* check function at level */
@@ -192,7 +199,9 @@ LUALIB_API void luaL_where (lua_State *L, int level) {
   lua_pushliteral(L, "");  /* else, no information available... */
 }
 
-
+/*唤起一个错误。错误消息的格式由 fmt 和额外的参数指定，遵守和 lua_pushfstring 一
+样的规则。如果可以获得发生错误时的文件和行号信息，那么这些信息会被加到错误消息的
+前面。 */
 LUALIB_API int luaL_error (lua_State *L, const char *fmt, ...) {
   va_list argp;
   va_start(argp, fmt);
@@ -203,7 +212,7 @@ LUALIB_API int luaL_error (lua_State *L, const char *fmt, ...) {
   return lua_error(L);
 }
 
-
+/*此函数产生标准库中文件相关的函数（io.open，os.rename，file:seek等等）的返回值 */
 LUALIB_API int luaL_fileresult (lua_State *L, int stat, const char *fname) {
   int en = errno;  /* calls to Lua API may change this value */
   if (stat) {
@@ -243,7 +252,7 @@ LUALIB_API int luaL_fileresult (lua_State *L, int stat, const char *fname) {
 
 #endif				/* } */
 
-
+/* 此函数产生标准库中进程相关的函数（os.execute和 io.close）的返回值*/
 LUALIB_API int luaL_execresult (lua_State *L, int stat) {
   const char *what = "exit";  /* type of termination */
   if (stat == -1)  /* error? */
@@ -268,7 +277,9 @@ LUALIB_API int luaL_execresult (lua_State *L, int stat) {
 ** Userdata's metatable manipulation
 ** =======================================================
 */
-
+/* 如果Lua 的注册表中已经有一个键的名字叫tname 则返回0，否则新创建一个表作为
+userdata 的元表，以tname 作为键名，将新创建的表加入到Lua 的注册表中，结果返回1。
+两种情况都会将注册表中与tname 关联的值压入栈。*/
 LUALIB_API int luaL_newmetatable (lua_State *L, const char *tname) {
   luaL_getmetatable(L, tname);  /* try to get metatable */
   if (!lua_isnil(L, -1))  /* name already in use? */
@@ -280,13 +291,14 @@ LUALIB_API int luaL_newmetatable (lua_State *L, const char *tname) {
   return 1;
 }
 
-
+/*将注册表中与 tname 关联的表设为栈顶对象的元表（参考luaL_newmetatable） */
 LUALIB_API void luaL_setmetatable (lua_State *L, const char *tname) {
   luaL_getmetatable(L, tname);
   lua_setmetatable(L, -2);
 }
 
-
+/*此函数的作用和 luaL_checkudata 一样，只是当测试失败时函数返回 NULL 而不是抛
+出一个错误。 */
 LUALIB_API void *luaL_testudata (lua_State *L, int ud, const char *tname) {
   void *p = lua_touserdata(L, ud);
   if (p != NULL) {  /* value is a userdata? */
@@ -301,7 +313,8 @@ LUALIB_API void *luaL_testudata (lua_State *L, int ud, const char *tname) {
   return NULL;  /* value is not a userdata with a metatable */
 }
 
-
+/*检查函数的第arg 个函数是否是一个名字为tname 的userdata （ 参考
+luaL_newmetatable）。是的话就返回 userdata的地址（参考 lua_touserdata）。 */
 LUALIB_API void *luaL_checkudata (lua_State *L, int ud, const char *tname) {
   void *p = luaL_testudata(L, ud, tname);
   if (p == NULL) typeerror(L, ud, tname);
@@ -316,7 +329,13 @@ LUALIB_API void *luaL_checkudata (lua_State *L, int ud, const char *tname) {
 ** Argument check functions
 ** =======================================================
 */
-
+/*检查函数的第arg 个参数是否为字符串，是的话就在数组lst（必须以NULL 结尾）中
+搜索它。如果在lst 数组中找到该字符串则返回该字符串在数组中的索引。如果参数不是一
+个字符串或无法在数组中找到就唤起一个错误。
+如果参数 def为非空，那么当参数不存在或参数为 nil时使用 def作为搜索的默认值。
+此函数在将字符串映射为C 枚举值时很有用。（Lua 的库中经常使用字符串而不是数字
+来做选项。）
+*/
 LUALIB_API int luaL_checkoption (lua_State *L, int narg, const char *def,
                                  const char *const lst[]) {
   const char *name = (def) ? luaL_optstring(L, narg, def) :
@@ -329,7 +348,8 @@ LUALIB_API int luaL_checkoption (lua_State *L, int narg, const char *def,
                        lua_pushfstring(L, "invalid option " LUA_QS, name));
 }
 
-
+/*将栈的大小扩大到top + sz 个元素，如果无法扩大则唤起一个错误。msg 是一个附加的
+消息，用于显示错误的（如果为NULL 则没有附加消息）。 */
 LUALIB_API void luaL_checkstack (lua_State *L, int space, const char *msg) {
   /* keep some extra space to run error routines, if needed */
   const int extra = LUA_MINSTACK;
@@ -341,26 +361,31 @@ LUALIB_API void luaL_checkstack (lua_State *L, int space, const char *msg) {
   }
 }
 
-
+/*检查函数的第 arg个函数的类型是否为 t。参考 lua_type以了解类型 t 的编码值 */
 LUALIB_API void luaL_checktype (lua_State *L, int narg, int t) {
   if (lua_type(L, narg) != t)
     tag_error(L, narg, t);
 }
 
-
+/* 检查函数的第arg 个参数是否是任意类型的值（包括nil）*/
 LUALIB_API void luaL_checkany (lua_State *L, int narg) {
   if (lua_type(L, narg) == LUA_TNONE)
     luaL_argerror(L, narg, "value expected");
 }
 
-
+/* 检查函数的第arg 个参数是否是一个字符串，是的话就返回该字符串。如果l 非空，那
+么*l 会被设为字符串的长度。
+此函数使用lua_tolstring来获得结果，因此此函数的转换规则与注意事项与lua_tolstring
+一样。*/
 LUALIB_API const char *luaL_checklstring (lua_State *L, int narg, size_t *len) {
   const char *s = lua_tolstring(L, narg, len);
   if (!s) tag_error(L, narg, LUA_TSTRING);
   return s;
 }
 
-
+/*检查函数的第arg 个参数是否为字符串，是的话就将返回该字符串。如果参数缺省或为
+nil则返回 d。其它情况唤起一个错误。
+如果l 为非空，则*l 会被设为该字符串的长度。 */
 LUALIB_API const char *luaL_optlstring (lua_State *L, int narg,
                                         const char *def, size_t *len) {
   if (lua_isnoneornil(L, narg)) {
@@ -371,7 +396,7 @@ LUALIB_API const char *luaL_optlstring (lua_State *L, int narg,
   else return luaL_checklstring(L, narg, len);
 }
 
-
+/*检查函数的第arg 个参数是否是一个数字，是的话就返回该数字 */
 LUALIB_API lua_Number luaL_checknumber (lua_State *L, int narg) {
   int isnum;
   lua_Number d = lua_tonumberx(L, narg, &isnum);
@@ -380,12 +405,13 @@ LUALIB_API lua_Number luaL_checknumber (lua_State *L, int narg) {
   return d;
 }
 
-
+/*检查函数的第 arg个参数是否为数字，是的话就返回该数字。如果参数缺省或为 nil则
+返回d。其它情况唤起一个错误。 */
 LUALIB_API lua_Number luaL_optnumber (lua_State *L, int narg, lua_Number def) {
   return luaL_opt(L, luaL_checknumber, narg, def);
 }
 
-
+/*检查函数的第 arg个参数是否为数字，是的话就将该数字转为 lua_Integer后返回 */
 LUALIB_API lua_Integer luaL_checkinteger (lua_State *L, int narg) {
   int isnum;
   lua_Integer d = lua_tointegerx(L, narg, &isnum);
@@ -394,7 +420,7 @@ LUALIB_API lua_Integer luaL_checkinteger (lua_State *L, int narg) {
   return d;
 }
 
-
+/* 检查函数的第 arg个参数是否为数字，是的话就将该数字转为 lua_Unsigned后返回*/
 LUALIB_API lua_Unsigned luaL_checkunsigned (lua_State *L, int narg) {
   int isnum;
   lua_Unsigned d = lua_tounsignedx(L, narg, &isnum);
@@ -403,13 +429,15 @@ LUALIB_API lua_Unsigned luaL_checkunsigned (lua_State *L, int narg) {
   return d;
 }
 
-
+/*检查函数的第 arg 个参数是否为数字，是的话就将该数字转为 lua_Integer后返回。如
+果参数缺省或为 nil则返回 d。其它情况唤起一个错误。 */
 LUALIB_API lua_Integer luaL_optinteger (lua_State *L, int narg,
                                                       lua_Integer def) {
   return luaL_opt(L, luaL_checkinteger, narg, def);
 }
 
-
+/*检查函数的第 arg 个参数是否为数字，是的话就将该数字转为 lua_Unsigned后返回。
+如果参数缺省或为 nil则返回 u。其它情况唤起一个错误。 */
 LUALIB_API lua_Unsigned luaL_optunsigned (lua_State *L, int narg,
                                                         lua_Unsigned def) {
   return luaL_opt(L, luaL_checkunsigned, narg, def);
@@ -434,6 +462,7 @@ LUALIB_API lua_Unsigned luaL_optunsigned (lua_State *L, int narg,
 /*
 ** returns a pointer to a free area with at least 'sz' bytes
 */
+/*返回一个指针，该指针指向的空间可以让你将一个长为sz 的字符串拷贝到缓冲区B           */
 LUALIB_API char *luaL_prepbuffsize (luaL_Buffer *B, size_t sz) {
   lua_State *L = B->L;
   if (B->size - B->n < sz) {  /* not enough space? */
@@ -455,19 +484,21 @@ LUALIB_API char *luaL_prepbuffsize (luaL_Buffer *B, size_t sz) {
   return &B->b[B->n];
 }
 
-
+/*将指针 s指向的长度为 l 的字符串加入到 B 缓冲区（参考 luaL_Buffer）。字符串中可以
+包含嵌入式0。 */
 LUALIB_API void luaL_addlstring (luaL_Buffer *B, const char *s, size_t l) {
   char *b = luaL_prepbuffsize(B, l);
   memcpy(b, s, l * sizeof(char));
   luaL_addsize(B, l);
 }
 
-
+/* 将指针 s 指向的以 0 结尾的字符串加入到 B 缓冲区（参考 luaL_Buffer）。字符串中不
+能包含嵌入式的0。*/
 LUALIB_API void luaL_addstring (luaL_Buffer *B, const char *s) {
   luaL_addlstring(B, s, strlen(s));
 }
 
-
+/* 结束使用缓冲区B，将最终的字符串压入栈*/
 LUALIB_API void luaL_pushresult (luaL_Buffer *B) {
   lua_State *L = B->L;
   lua_pushlstring(L, B->b, B->n);
@@ -475,13 +506,15 @@ LUALIB_API void luaL_pushresult (luaL_Buffer *B) {
     lua_remove(L, -2);  /* remove old buffer */
 }
 
-
+/*等同于执行完 luaL_addsize后再执行luaL_pushresult */
 LUALIB_API void luaL_pushresultsize (luaL_Buffer *B, size_t sz) {
   luaL_addsize(B, sz);
   luaL_pushresult(B);
 }
 
-
+/*将栈顶的值加入到 B 缓冲区（参考 luaL_Buffer）并将该值弹出。
+这是唯一一个可以（必须）操作栈中额外元素（也就是要加入缓冲区的值）的字符串缓
+冲区相关的函数。 */
 LUALIB_API void luaL_addvalue (luaL_Buffer *B) {
   lua_State *L = B->L;
   size_t l;
@@ -492,7 +525,7 @@ LUALIB_API void luaL_addvalue (luaL_Buffer *B) {
   lua_remove(L, (buffonstack(B)) ? -2 : -1);  /* remove value */
 }
 
-
+/*初始化缓冲区B。此函数并不分配任何空间。缓冲区必须声明为一个变量 */
 LUALIB_API void luaL_buffinit (lua_State *L, luaL_Buffer *B) {
   B->L = L;
   B->b = B->initb;
@@ -500,7 +533,7 @@ LUALIB_API void luaL_buffinit (lua_State *L, luaL_Buffer *B) {
   B->size = LUAL_BUFFERSIZE;
 }
 
-
+/* 等同于执行完 luaL_buffinit后再执行luaL_prepbuffsize。*/
 LUALIB_API char *luaL_buffinitsize (lua_State *L, luaL_Buffer *B, size_t sz) {
   luaL_buffinit(L, B);
   return luaL_prepbuffsize(B, sz);
@@ -518,7 +551,12 @@ LUALIB_API char *luaL_buffinitsize (lua_State *L, luaL_Buffer *B, size_t sz) {
 /* index of free-list header */
 #define freelist	0
 
-
+/*在索引t 处的table 中为栈顶的对象创建并返回一个引用（将栈顶对象弹出栈）。
+引用是一个唯一的整型键，只要你不手动往t 处的table 中加入整型键，那么luaL_ref
+会保证返回的键的唯一性。你可以使用引用r 作为参数调用lua_rawgeti(L, t, r)来获得对象的
+引用。函数 luaL_unref释放一个引用及其关联的对象。
+如果栈顶的对象是 nil，那么 luaL_ref 返回常量 LUA_REFNIL。常量 LUA_NOREF 用于
+区别luaL_ref 返回的任何引用。 */
 LUALIB_API int luaL_ref (lua_State *L, int t) {
   int ref;
   if (lua_isnil(L, -1)) {
@@ -539,7 +577,9 @@ LUALIB_API int luaL_ref (lua_State *L, int t) {
   return ref;
 }
 
-
+/*从索引 t 处的 table 中释放引用 ref（参考 luaL_ref）。该入口会从 table 中移除，因此引
+用的对象可以被回收掉。被释放的引用ref 可以被再次使用。
+如果ref 是LUA_NOREF 或LUA_REFNIL，luaL_unref 不作任何操作。 */
 LUALIB_API void luaL_unref (lua_State *L, int t, int ref) {
   if (ref >= 0) {
     t = lua_absindex(L, t);
@@ -626,7 +666,13 @@ static int skipcomment (LoadF *lf, int *cp) {
   else return 0;  /* no comment */
 }
 
-
+/* 将文件的内容加载为 Lua 代码块。此函数使用 lua_load来将文件名为 filename 的文件
+内容加载为代码块。如果filename 为空，那么会从标准输入中加载。如果文件的第一行以#
+开头，那么这行内容会被忽略。
+字符串 mode的作用和 lua_load中的一样。
+如果无法打开/读取文件或文件的模式有错误，此函数会返回LUA_ERRFILE，此函数
+的其它返回值与 lua_load的一样。
+和 lua_load一样，此函数只加载代码块并不执行它。*/
 LUALIB_API int luaL_loadfilex (lua_State *L, const char *filename,
                                              const char *mode) {
   LoadF lf;
@@ -678,7 +724,7 @@ static const char *getS (lua_State *L, void *ud, size_t *size) {
   return ls->s;
 }
 
-
+/*等同于 mode为 NULL 时的 luaL_loadbufferx */
 LUALIB_API int luaL_loadbufferx (lua_State *L, const char *buff, size_t size,
                                  const char *name, const char *mode) {
   LoadS ls;
@@ -687,7 +733,9 @@ LUALIB_API int luaL_loadbufferx (lua_State *L, const char *buff, size_t size,
   return lua_load(L, getS, &ls, name, mode);
 }
 
-
+/*将字符串的内容加载为Lua 代码块。此函数使用lua_load 来加载以0 结尾的字符串s。
+此函数的返回值和lua_load 一样。
+和lua_load 一样，此函数只加载代码块并不执行它。 */
 LUALIB_API int luaL_loadstring (lua_State *L, const char *s) {
   return luaL_loadbuffer(L, s, strlen(s), s);
 }
@@ -695,7 +743,8 @@ LUALIB_API int luaL_loadstring (lua_State *L, const char *s) {
 /* }====================================================== */
 
 
-
+/*将obj 索引处的对象的元表的域e 的值压入栈。如果目标对象没有元表或元表中没有该
+域则返回false 并不压任何东西入栈。 */
 LUALIB_API int luaL_getmetafield (lua_State *L, int obj, const char *event) {
   if (!lua_getmetatable(L, obj))  /* no metatable? */
     return 0;
@@ -711,7 +760,10 @@ LUALIB_API int luaL_getmetafield (lua_State *L, int obj, const char *event) {
   }
 }
 
-
+/*调用一个元方法。
+如果index 处的对象有元表且元表中有e 这个域，那么此函数会以index 处的对象作为
+唯一参数传给元方法来调用它。此时函数返回真并将元方法返回的值压入栈。如果对象没有
+元表或元方法，函数返回假（不会压入任何值进栈）。 */
 LUALIB_API int luaL_callmeta (lua_State *L, int obj, const char *event) {
   obj = lua_absindex(L, obj);
   if (!luaL_getmetafield(L, obj, event))  /* no metafield? */
@@ -721,7 +773,8 @@ LUALIB_API int luaL_callmeta (lua_State *L, int obj, const char *event) {
   return 1;
 }
 
-
+/* 返回 index处的值的“长度”。它等同于 Lua 代码中的“#”操作符（参考 3.4.6）。如果
+操作的结果不是一个数字则唤起一个错误。（这种情况只能通过元方法发生。）*/
 LUALIB_API int luaL_len (lua_State *L, int idx) {
   int l;
   int isnum;
@@ -733,7 +786,10 @@ LUALIB_API int luaL_len (lua_State *L, int idx) {
   return l;
 }
 
-
+/*用一个合适的格式将指定索引处的任何值转为C 字符串。字符串会被压入栈并被函数
+返回。如果len 为非空，那么函数将*len 的值设为字符串的长度。
+如果指定的值有带“__tostring”域的元表，那么luaL_tolstring 会以该值作为参数去调
+用对应的元方法，其结果将作为luaL_tolstring 的结果返回。 */
 LUALIB_API const char *luaL_tolstring (lua_State *L, int idx, size_t *len) {
   if (!luaL_callmeta(L, idx, "__tostring")) {  /* no metafield? */
     switch (lua_type(L, idx)) {
@@ -823,7 +879,7 @@ LUALIB_API void luaL_pushmodule (lua_State *L, const char *modname,
   lua_remove(L, -2);  /* remove _LOADED table */
 }
 
-
+/*在指定的状态机中开启所有的Lua 标准库 */
 LUALIB_API void luaL_openlib (lua_State *L, const char *libname,
                                const luaL_Reg *l, int nup) {
   luaL_checkversion(L);
@@ -845,6 +901,10 @@ LUALIB_API void luaL_openlib (lua_State *L, const char *libname,
 ** function gets the 'nup' elements at the top as upvalues.
 ** Returns with only the table at the stack.
 */
+/* 将数组 l（参考 luaL_Reg）中的所有函数注册到栈顶（如果有 upvalue 则为 upvalue 的
+下面，参考下面的解释。）的table 中。
+如果nup 不是0，那么所有函数都将共享nup 个upvalue。这些upvalue 必须在压入库表
+（library table）后接着入栈。注册完成后，这些值都会被弹出栈。*/
 LUALIB_API void luaL_setfuncs (lua_State *L, const luaL_Reg *l, int nup) {
   luaL_checkversion(L);
   luaL_checkstack(L, nup, "too many upvalues");
@@ -863,6 +923,8 @@ LUALIB_API void luaL_setfuncs (lua_State *L, const luaL_Reg *l, int nup) {
 ** ensure that stack[idx][fname] has a table and push that table
 ** into the stack
 */
+/* 确保t[fname]是一个table 并将其压入栈，其中t 是索引idx 处的值。如果存在这个table
+则返回true，否则返回false 并创建一个新的table。*/
 LUALIB_API int luaL_getsubtable (lua_State *L, int idx, const char *fname) {
   lua_getfield(L, idx, fname);
   if (lua_istable(L, -1)) return 1;  /* table already there */
@@ -883,6 +945,10 @@ LUALIB_API int luaL_getsubtable (lua_State *L, int idx, const char *fname) {
 ** is true, also registers the result in the global table.
 ** Leaves resulting module on the top.
 */
+/*以字符串modname 作为参数调用函数openf ， 并将其返回结果设置到
+package.loaded[modname]中，就像该函数是通过 require来调用的一样。
+如果glb 为true，那么结果也会保存到名为modname 的全局变量中。
+调用结果的拷贝会压入栈。 */
 LUALIB_API void luaL_requiref (lua_State *L, const char *modname,
                                lua_CFunction openf, int glb) {
   lua_pushcfunction(L, openf);
@@ -898,7 +964,8 @@ LUALIB_API void luaL_requiref (lua_State *L, const char *modname,
   }
 }
 
-
+/*创建字符串s 的拷贝，其中字符串s 中的字符串p 会被替换为字符串r。将拷贝结果压
+入栈并返回它。 */
 LUALIB_API const char *luaL_gsub (lua_State *L, const char *s, const char *p,
                                                                const char *r) {
   const char *wild;
@@ -933,14 +1000,19 @@ static int panic (lua_State *L) {
   return 0;  /* return to Lua to abort */
 }
 
-
+/* 创建一个新的 Lua 状态机。它调用 lua_newstate时使用了一个基于标准 C 的 realloc 函
+数作为分配函数，并设置了一个恐慌函数（参考 4.6）以在发生致命错误时将错误消息打印
+到标准错误输出中。
+返回新的状态机，如果发生了内存分配错误则返回NULL。*/
 LUALIB_API lua_State *luaL_newstate (void) {
   lua_State *L = lua_newstate(l_alloc, NULL);
   if (L) lua_atpanic(L, &panic);
   return L;
 }
 
-
+/*检查调用此函数的core 和创建当前Lua 状态机的core 以及产生此调用的代码这三者使
+用的是否是同一个版本号的Lua。同样也可以检查调用此函数的core 和创建当前Lua 状态
+机的core 使用的是否是同一个地址空间。 */
 LUALIB_API void luaL_checkversion_ (lua_State *L, lua_Number ver) {
   const lua_Number *v = lua_version(L);
   if (v != lua_version(NULL))
