@@ -267,9 +267,10 @@ static const luaL_Reg mathlib[] = {
 
 /*
 ** Open math library
+数学函数注册
 */
 LUAMOD_API int luaopen_math (lua_State *L) {
-  luaL_newlib(L, mathlib);
+  luaL_newlib(L, mathlib);/*将数学函数注入table */
   lua_pushnumber(L, PI);
   lua_setfield(L, -2, "pi");
   lua_pushnumber(L, HUGE_VAL);

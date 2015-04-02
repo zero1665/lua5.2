@@ -89,7 +89,7 @@ typedef LUAI_UACNUMBER l_uacNumber;
 #define UNUSED(x)	((void)(x))	/* to avoid warnings */
 #endif
 
-
+/* lua ÀàÐÍ×ª»»*/
 #define cast(t, exp)	((t)(exp))
 
 #define cast_byte(i)	cast(lu_byte, (i))
