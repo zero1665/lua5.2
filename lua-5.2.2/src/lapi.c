@@ -714,7 +714,7 @@ LUA_API void lua_rawgetp (lua_State *L, int idx, const void *p) {
 }
 
 /*
-创建一个空的table 并将其压入栈。参数narr 指明这个table 的数组部分有多少个元素；
+创建一个空的table 并将其压入栈。参数narray 指明这个table 的数组部分有多少个元素；
 参数nrec 指明这个table 的其它部分有多少个元素。Lua 可以使用这两个参数来为一个新的
 table 预分配内存。这种预分配在你预先知道table 有多少个元素时很有用，不然的话你可以
 使用 lua_newtable。
